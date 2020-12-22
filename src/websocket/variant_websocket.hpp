@@ -10,6 +10,8 @@
 #include "config.hpp"
 #include "websocket/connect_options.hpp"
 
+#include <tuple>
+
 namespace websocket
 {
 enum transport_type
@@ -26,7 +28,34 @@ struct variant_websocket
     variant_websocket() = default;
 
     net::awaitable< void >
-    connect(std::string const &url, connect_options const &opts);
+    connect(net::any_io_executor   exec,
+            std::string const &    url,
+            connect_options const &opts);
+
+    [[nodiscard]] net::any_io_executor
+    get_executor();
+
+    [[nodiscard]] net::awaitable< void >
+    drop();
+
+    void
+    text();
+
+    void
+    binary();
+
+    bool
+    is_binary() const;
+
+    net::awaitable< std::tuple< error_code, std::size_t > >
+    read(beast::flat_buffer &buf);
+
+    template < class CompletionHandler >
+    auto
+    send(net::const_buffer buf, CompletionHandler &&token);
+
+    beast::websocket::close_reason
+    reason() const;
 
   private:
     void
@@ -54,6 +83,10 @@ struct variant_websocket
     client_handshake(beast::websocket::response_type &response,
                      std::string const &              host,
                      std::string const &              target);
+
+    [[nodiscard]] net::awaitable< void >
+    send_close(beast::websocket::close_reason cr =
+                   beast::websocket::close_code::going_away);
 
     template < class F >
     auto
@@ -94,6 +127,15 @@ variant_websocket::visit(F &&f) const -> decltype(auto)
 
     assert(!"invalid websocket visit");
     throw std::logic_error("invalid websocket visit");
+}
+
+template < class CompletionHandler >
+auto
+variant_websocket::send(net::const_buffer buf, CompletionHandler &&token)
+{
+    return visit([&](auto &ws) {
+        return ws.async_write(buf, std::forward< CompletionHandler >(token));
+    });
 }
 
 }   // namespace websocket

@@ -21,7 +21,6 @@ struct connect_options
     std::chrono::milliseconds pingpong_timeout = std::chrono::seconds(30);
 
     ssl::context &       sslctx = default_ssl_context();
-    net::any_io_executor exec;
     async::stop_token    stop;
 };
 

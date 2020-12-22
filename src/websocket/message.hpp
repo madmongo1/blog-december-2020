@@ -7,6 +7,8 @@
 
 #ifndef DECEMBER_2020_MESSAGE_HPP
 #define DECEMBER_2020_MESSAGE_HPP
+#include "config.hpp"
+
 #include <cstddef>
 #include <iosfwd>
 #include <span>
@@ -16,6 +18,8 @@ namespace websocket
 {
 struct message
 {
+    message(std::shared_ptr< beast::flat_buffer > data, bool isbin = false);
+
     bool
     is_text() const;
 
@@ -27,10 +31,14 @@ struct message
 
     std::span< std::byte >
     binary() const;
-};
 
-std::ostream &
-operator<<(std::ostream &os, message const &m);
+    friend std::ostream &
+    operator<<(std::ostream &os, message const &m);
+
+  private:
+    std::shared_ptr< beast::flat_buffer > data_;
+    bool                                  is_binary_;
+};
 
 }   // namespace websocket
 

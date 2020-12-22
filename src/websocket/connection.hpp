@@ -9,15 +9,65 @@
 #define DECEMBER_2020_CONNECTION_HPP
 
 #include "websocket/connect_options.hpp"
+#include "websocket/connection_impl.hpp"
 #include "websocket/event.hpp"
 
 namespace websocket
 {
+struct connection_lifetime
+{
+    connection_lifetime(std::shared_ptr< connection_impl > impl)
+    : lifetime_(construct_lifetime(impl))
+    , impl_(std::move(impl))
+    {
+    }
+
+    std::shared_ptr< connection_impl > const &
+    get_impl() const
+    {
+        return impl_;
+    }
+
+  private:
+    static std::shared_ptr< void >
+    construct_lifetime(std::shared_ptr< connection_impl > const &impl)
+    {
+        static int useful_address;
+
+        auto deleter = [impl](void *) {
+            net::co_spawn(
+                impl->get_executor(),
+                [impl]() -> net::awaitable< void > {
+                    co_await impl->shutdown();
+                },
+                net::detached);
+        };
+
+        return std::shared_ptr< void >(&useful_address, deleter);
+    }
+
+    std::shared_ptr< void >            lifetime_;
+    std::shared_ptr< connection_impl > impl_;
+};
+
 struct connection
 {
-    void send(std::string_view msg, bool is_text = true);
-    net::awaitable<event> consume();
-    beast::websocket::close_reason const& reason() const;
+    connection(connection_lifetime life)
+    : life_(std::move(life))
+    {
+    }
+
+    void
+    send(std::string_view msg, bool is_text = true);
+
+    net::awaitable< event >
+    consume();
+
+    beast::websocket::close_reason
+    reason() const;
+
+  private:
+    connection_lifetime life_;
 };
 
 net::awaitable< connection >

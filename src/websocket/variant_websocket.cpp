@@ -142,14 +142,12 @@ namespace
 }   // namespace
 
 auto
-variant_websocket::connect(std::string const &url, connect_options const &opts)
+variant_websocket::connect(net::any_io_executor   exec,
+                           std::string const &    url,
+                           connect_options const &opts)
     -> net::awaitable< void >
 {
     assert(holds_alternative< monostate >(var_));
-
-    auto exec = opts.exec;
-    if (!exec)
-        exec = co_await net::this_coro::executor;
 
     static auto url_regex = std::regex(
         R"regex((ws|wss|http|https)://([^/ :]+):?([^/ ]*)(/?[^ #?]*)\x3f?([^ #]*)#?([^ ]*))regex",
@@ -235,6 +233,90 @@ variant_websocket::client_handshake(beast::websocket::response_type &response,
     return visit([&](auto &ws) {
         return ws.async_handshake(response, host, target, net::use_awaitable);
     });
+}
+
+net::any_io_executor
+variant_websocket::get_executor()
+{
+    return visit([](auto &ws) { return ws.get_executor(); });
+}
+
+net::awaitable< void >
+variant_websocket::send_close(beast::websocket::close_reason cr)
+{
+    assert(get_executor() == co_await net::this_coro::executor);
+
+    co_await visit([&](auto &ws) {
+        error_code ec;
+        return ws.async_close(cr, net::redirect_error(net::use_awaitable, ec));
+    });
+}
+
+net::awaitable< void >
+variant_websocket::drop()
+{
+    co_await send_close();
+}
+
+void
+variant_websocket::text()
+{
+    visit([](auto &ws) { ws.text(); });
+}
+void
+variant_websocket::binary()
+{
+    visit([](auto &ws) { ws.binary(); });
+}
+
+tls_layer *
+variant_websocket::query_tls()
+{
+    if (holds_alternative< wss_layer >(var_))
+        return std::addressof(get< wss_layer >(var_).next_layer());
+    else
+        return nullptr;
+}
+
+void
+variant_websocket::emplace_tls(net::any_io_executor                   exec,
+                               ssl::context &                         sslctx,
+                               beast::websocket::stream_base::timeout to)
+{
+    assert(holds_alternative< monostate >(var_));
+    auto &wss = var_.emplace< wss_layer >(std::move(exec), sslctx);
+    wss.set_option(to);
+}
+
+void
+variant_websocket::emplace_tcp(net::any_io_executor                   exec,
+                               beast::websocket::stream_base::timeout to)
+{
+    assert(holds_alternative< monostate >(var_));
+    auto &ws = var_.emplace< ws_layer >(std::move(exec));
+    ws.set_option(to);
+}
+
+beast::websocket::close_reason
+variant_websocket::variant_websocket::reason() const
+{
+    return visit([](auto &ws) { return ws.reason(); });
+}
+
+net::awaitable< std::tuple< error_code, std::size_t > >
+variant_websocket::read(beast::flat_buffer &buf)
+{
+    error_code ec;
+    auto       size = co_await visit([&](auto &ws) {
+        return ws.async_read(buf, net::redirect_error(net::use_awaitable, ec));
+    });
+    co_return std::make_tuple(ec, size);
+}
+
+bool
+variant_websocket::is_binary() const
+{
+    return visit([](auto &ws) { return ws.binary(); });
 }
 
 }   // namespace websocket

@@ -15,16 +15,27 @@ namespace websocket
 {
 struct event
 {
+    explicit event(error_code ec = error_code());
+
+    explicit event(struct message msg);
+
     bool
     is_error() const;
+
     bool
     is_message() const;
+
     error_code const &
     error() const;
+
     struct message &
     message();
+
     struct message const &
     message() const;
+
+    using var_type = variant< error_code, struct message >;
+    var_type var_;
 };
 
 }   // namespace websocket
