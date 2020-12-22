@@ -91,7 +91,10 @@ connection_impl::consume()
     auto dynbuf    = std::make_shared< beast::flat_buffer >();
     auto [ec, len] = co_await ws_.read(*dynbuf);
     if (ec)
+    {
+        transition(state_stopped);
         co_return event(ec);
+    }
     else
         co_return event(message(dynbuf, ws_.is_binary()));
 }

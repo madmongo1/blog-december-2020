@@ -49,8 +49,6 @@ catch (std::exception &e)
 net::awaitable< void >
 chat()
 {
-    std::cout << __func__ << std::endl;
-
     auto ws = co_await websocket::connect("wss://echo.websocket.org");
 
     auto stop_children = async::stop_source();
